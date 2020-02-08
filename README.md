@@ -1,4 +1,5 @@
-# Flugzeug-Spiel - StarFighter
+# StarFighter
+Flugzeug-Spiel
 
 Grundlage für das Spiel war das YouTube Tutorial "How to make a 2D game for Android"
 
