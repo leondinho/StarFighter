@@ -23,6 +23,7 @@ public class Explosion {
 
         spritesheet = res;
 
+        //Exlposionsanimation ablaufen lassen
         for(int i = 0; i<image.length; i++)
         {
             if(i%5==0&&i>0)row++;

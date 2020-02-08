@@ -20,22 +20,32 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
     public static final int WIDTH = 856;
     public static final int HEIGHT = 480;
     public static final int MOVESPEED = -5;
+    private static final int TANKPOS = HEIGHT - 100;
+
+    private long nextSpeedingTime;
     private long smokeStartTime;
     private long missileStartTime;
+    private long tankStartTime;
+    private long fuelStartTime;
+
     private MainThread thread;
     private Background bg;
     private Player player;
+
     private ArrayList<Smokepuff> smoke;
     private ArrayList<Missile> missiles;
+    private ArrayList<Bullet> bullets;
+    private ArrayList<Tank> tanks;
+    private ArrayList<Fuel> fuels;
     private ArrayList<TopBorder> topborder;
     private ArrayList<BotBorder> botborder;
+
     private Random rand = new Random();
     private int maxBorderHeight;
     private int minBorderHeight;
     private boolean topDown = true;
     private boolean botDown = true;
     private boolean newGameCreated;
-
 
     private Explosion explosion;
     private long startReset;
@@ -80,15 +90,25 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
     public void surfaceCreated(SurfaceHolder holder){
 
         bg = new Background(BitmapFactory.decodeResource(getResources(), R.drawable.skyline));
-        player = new Player(BitmapFactory.decodeResource(getResources(), R.drawable.aircraft), 65, 25, 3);
+        player = new Player(BitmapFactory.decodeResource(getResources(), R.drawable.aircraft), 65, 25, 3, 100);
+
         smoke = new ArrayList<Smokepuff>();
         missiles = new ArrayList<Missile>();
+        bullets = new ArrayList<Bullet>();
+        fuels = new ArrayList<Fuel>();
+        tanks = new ArrayList<Tank>();
+
         topborder = new ArrayList<TopBorder>();
         botborder = new ArrayList<BotBorder>();
+
         smokeStartTime=  System.nanoTime();
         missileStartTime = System.nanoTime();
+        tankStartTime = System.nanoTime();
+        fuelStartTime = System.nanoTime();
+        nextSpeedingTime = System.nanoTime();
 
         thread = new MainThread(getHolder(), this);
+
         //Gameloop starten
         thread.setRunning(true);
         thread.start();
@@ -122,10 +142,8 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
     }
 
     public void update()
-
     {
         if(player.getPlaying()) {
-
             if(botborder.isEmpty())
             {
                 player.setPlaying(false);
@@ -135,6 +153,10 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
             {
                 player.setPlaying(false);
                 return;
+            }
+            if(player.getFuel() <= 0)
+            {
+                player.setY(player.getY() + 15);
             }
 
             bg.update();
@@ -160,8 +182,12 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
             //Update untere Rand
             this.updateBottomBorder();
 
-            //Raketen zum Timer hinzufügen
+            //Raketen hinzufügen
             long missileElapsed = (System.nanoTime()-missileStartTime)/1000000;
+            int missilePos = (int)(rand.nextDouble()*(HEIGHT - (maxBorderHeight * 2))+maxBorderHeight);
+            while(Math.abs(missilePos-TANKPOS) <= 20.0f || missilePos > TANKPOS ){
+                missilePos = (int)(rand.nextDouble()*(HEIGHT - (maxBorderHeight * 2))+maxBorderHeight);
+            }
             if(missileElapsed >(2000 - player.getScore()/4)){
 
                 //erste Rakete geht immer durch die Mitte
@@ -173,7 +199,7 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
                 else
                 {
                     missiles.add(new Missile(BitmapFactory.decodeResource(getResources(),R.drawable.missile),
-                            WIDTH+10, (int)(rand.nextDouble()*(HEIGHT - (maxBorderHeight * 2))+maxBorderHeight),
+                            WIDTH+10, missilePos,
                             45,15, player.getScore(),13));
                 }
                 //Timer zurücksetzen
@@ -199,7 +225,98 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
                     break;
                 }
             }
-            //Rauchstöße zum Timer hinzufügen
+
+            //Benzinkanister an anderer Stelle als Rakete einfügen
+            long fuelElapsed = (System.nanoTime()-fuelStartTime)/1000000;
+            if(fuelElapsed >(3000 - player.getScore()/4)){
+                    int fuelPos = (int)(rand.nextDouble()*(HEIGHT - (maxBorderHeight * 2))+maxBorderHeight);
+                    while((Math.abs(fuelPos-missilePos) <= 20.0f && Math.abs(fuelPos-TANKPOS) <= 10.0f) || fuelPos > TANKPOS){
+                        fuelPos = (int)(rand.nextDouble()*(HEIGHT - (maxBorderHeight * 2))+maxBorderHeight);
+                    }
+                        fuels.add(new Fuel(BitmapFactory.decodeResource(getResources(),R.drawable.fuel),
+                            WIDTH+10, fuelPos,
+                            28,32, player.getScore(),1));
+
+                //Timer zurücksetzen
+                fuelStartTime = System.nanoTime();
+            }
+
+            for(int i = 0; i<fuels.size();i++)
+            {
+                //Update Benzinkanister
+                fuels.get(i).update();
+
+                if(collision(fuels.get(i),player))
+                {
+                    fuels.remove(i);
+                    player.changeFuel(10);
+                    break;
+                }
+                //Benzinkanister entfernen, wenn sie vom Bildschirm verschwinden
+                if(fuels.get(i).getX()<-100)
+                {
+                    fuels.remove(i);
+                    break;
+                }
+            }
+
+            //Tanks hinzufügen
+            long tankElapsed = (System.nanoTime()-tankStartTime)/1000000;
+            if(tankElapsed >(4000 - player.getScore()/4)){
+                    tanks.add(new Tank(BitmapFactory.decodeResource(getResources(),R.drawable.tank),
+                            WIDTH+10, TANKPOS,
+                            51,40, player.getScore(),1));
+
+                //Timer zurücksetzen
+                tankStartTime = System.nanoTime();
+            }
+
+            for(int i = 0; i<tanks.size();i++)
+            {
+                //Update Panzer
+                tanks.get(i).update();
+                if(tanks.get(i).getX() <= (WIDTH/4) * 3 && !tanks.get(i).getShot()){
+
+                    tanks.get(i).shoot();
+                    bullets.add(new Bullet(tanks.get(i).getX(), tanks.get(i).getY() + 10, player.getX(), player.getY()));
+                }
+
+                if(collision(tanks.get(i),player) )
+                {
+                    tanks.remove(i);
+                    player.setPlaying(false);
+                    break;
+                }
+
+                //Panzer entfernen, wenn sie vom Bildschirm verschwinden
+                if(tanks.get(i).getX()<-100)
+                {
+                    tanks.remove(i);
+                    break;
+                }
+            }
+
+            for(int i = 0; i<bullets.size();i++)
+            {
+                //Bullets Panzer
+                bullets.get(i).update();
+
+                if(collision(bullets.get(i),player))
+                {
+                    bullets.remove(i);
+                    player.setPlaying(false);
+                    break;
+                }
+                //Panzer entfernen, wenn sie vom Bildschirm verschwinden
+                if(bullets.get(i).getX()<-100)
+                {
+                    bullets.remove(i);
+                    break;
+                }
+            }
+
+
+            //Rauchstöße hinzufügen
             long elapsed = (System.nanoTime() - smokeStartTime)/1000000;
             if(elapsed > 120){
                 smoke.add(new Smokepuff(player.getX(), player.getY()+10));
@@ -247,6 +364,7 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
     @Override
     public void draw(Canvas canvas)
     {
+        super.draw(canvas);
         final float scaleFactorX = getWidth()/(WIDTH*1.f);
         final float scaleFactorY = getHeight()/(HEIGHT*1.f);
 
@@ -268,6 +386,21 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
                 m.draw(canvas);
             }
 
+            for(Tank t: tanks)
+            {
+                t.draw(canvas);
+            }
+
+            for(Bullet b: bullets)
+            {
+                b.draw(canvas);
+            }
+
+            for(Fuel f: fuels)
+            {
+                f.draw(canvas);
+            }
+
             for(TopBorder tb: topborder)
             {
                 tb.draw(canvas);
@@ -284,7 +417,6 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
             }
             drawText(canvas);
             canvas.restoreToCount(savedState);
-
         }
     }
 
@@ -363,13 +495,17 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
         topborder.clear();
 
         missiles.clear();
+        tanks.clear();
+        fuels.clear();
         smoke.clear();
+        bullets.clear();
 
         minBorderHeight = 5;
         maxBorderHeight = 30;
 
         player.resetDYA();
         player.resetScore();
+        player.resetFuel();
         player.setY(HEIGHT/2);
 
         if(player.getScore()>best)
@@ -418,20 +554,24 @@ public class GamePanel extends SurfaceView implements SurfaceHolder.Callback
         Paint paint = new Paint();
         paint.setColor(Color.BLACK);
         paint.setTextSize(30);
-        paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-        canvas.drawText("DISTANCE: " + (player.getScore()*3), 10, HEIGHT - 10, paint);
+        paint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        canvas.drawText("DISTANZ: " + (player.getScore()*3), 10, HEIGHT - 10, paint);
+        int currentFuel = player.getFuel();
+        if(currentFuel <= 0)
+            currentFuel = 0;
+        canvas.drawText("TREIBSTOFF: " + (currentFuel), WIDTH-280, HEIGHT - 10, paint);
 
 
         if(!player.getPlaying()&&newGameCreated&&reset)
         {
             Paint paint1 = new Paint();
-            paint1.setTextSize(40);
-            paint1.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-            canvas.drawText("PRESS TO START", WIDTH/2-50, HEIGHT/2, paint1);
+            paint1.setTextSize(30);
+            paint1.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+            canvas.drawText("DRÜCKE UM ZU STARTEN", WIDTH/2 - 200, HEIGHT/2 - 100, paint1);
 
             paint1.setTextSize(20);
-            canvas.drawText("PRESS AND HOLD TO GO UP", WIDTH/2-50, HEIGHT/2 + 20, paint1);
-            canvas.drawText("RELEASE TO GO DOWN", WIDTH/2-50, HEIGHT/2 + 40, paint1);
+            canvas.drawText("HALTE ZUM STEIGEN", WIDTH/2- 200, HEIGHT/2 - 73, paint1);
+            canvas.drawText("LASS LOS ZUM FALLEN", WIDTH/2- 200, HEIGHT/2 -50, paint1);
         }
     }
 

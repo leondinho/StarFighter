@@ -20,6 +20,7 @@ public class Animation {
 
     public void update()
     {
+        //Animation an Frames anpassen
         long elapsed = (System.nanoTime()-startTime)/1000000;
 
         if(elapsed>delay)
